@@ -4,26 +4,43 @@ export interface StudentDevice {
   id: string;
   name: string;
   deviceId: string;
+  division: string;
   rssi?: number;
   timestamp: Date;
 }
 
-// Demo mapping of device UUIDs to student names
-const STUDENT_MAPPING: Record<string, string> = {
-  "12:34:56:78:90:AB": "Emma Johnson",
-  "AA:BB:CC:DD:EE:FF": "Liam Smith", 
-  "11:22:33:44:55:66": "Olivia Davis",
-  "77:88:99:00:11:22": "Noah Wilson",
-  "FF:EE:DD:CC:BB:AA": "Ava Brown",
-  "33:44:55:66:77:88": "William Jones",
-  "99:88:77:66:55:44": "Sophia Garcia",
-  "BB:CC:DD:EE:FF:00": "James Miller",
+export interface StudentInfo {
+  name: string;
+  division: string;
+}
+
+// Demo mapping of device UUIDs to student info
+const STUDENT_MAPPING: Record<string, StudentInfo> = {
+  "12:34:56:78:90:AB": { name: "Emma Johnson", division: "Computer Science A" },
+  "AA:BB:CC:DD:EE:FF": { name: "Liam Smith", division: "Computer Science A" }, 
+  "11:22:33:44:55:66": { name: "Olivia Davis", division: "Computer Science A" },
+  "77:88:99:00:11:22": { name: "Noah Wilson", division: "Computer Science A" },
+  "FF:EE:DD:CC:BB:AA": { name: "Ava Brown", division: "Computer Science B" },
+  "33:44:55:66:77:88": { name: "William Jones", division: "Computer Science B" },
+  "99:88:77:66:55:44": { name: "Sophia Garcia", division: "Computer Science B" },
+  "BB:CC:DD:EE:FF:00": { name: "James Miller", division: "Computer Science B" },
+  "00:11:22:33:44:55": { name: "Isabella Chen", division: "Information Technology A" },
+  "55:66:77:88:99:AA": { name: "Alexander Lee", division: "Information Technology A" },
+  "CC:DD:EE:FF:00:11": { name: "Mia Rodriguez", division: "Information Technology B" },
+  "22:33:44:55:66:77": { name: "Ethan Taylor", division: "Information Technology B" },
+};
+
+// Get all available divisions
+export const getAvailableDivisions = (): string[] => {
+  const divisions = Object.values(STUDENT_MAPPING).map(student => student.division);
+  return [...new Set(divisions)].sort();
 };
 
 class BluetoothAttendanceService {
   private devices: Map<string, StudentDevice> = new Map();
   private isScanning = false;
   private scanTimeout?: NodeJS.Timeout;
+  private selectedDivision: string | null = null;
 
   async initialize(): Promise<boolean> {
     try {
@@ -34,6 +51,10 @@ class BluetoothAttendanceService {
       console.error("Failed to initialize Bluetooth:", error);
       return false;
     }
+  }
+
+  setSelectedDivision(division: string) {
+    this.selectedDivision = division;
   }
 
   async startScanning(onDeviceFound: (device: StudentDevice) => void): Promise<void> {
@@ -80,12 +101,18 @@ class BluetoothAttendanceService {
   private handleDeviceFound(result: ScanResult, onDeviceFound: (device: StudentDevice) => void) {
     // Check if this device ID maps to a student
     const deviceId = result.device.deviceId;
-    const studentName = STUDENT_MAPPING[deviceId];
+    const studentInfo = STUDENT_MAPPING[deviceId];
     
-    if (studentName && !this.devices.has(deviceId)) {
+    if (studentInfo && !this.devices.has(deviceId)) {
+      // Filter by selected division
+      if (this.selectedDivision && studentInfo.division !== this.selectedDivision) {
+        return;
+      }
+      
       const studentDevice: StudentDevice = {
         id: deviceId,
-        name: studentName,
+        name: studentInfo.name,
+        division: studentInfo.division,
         deviceId: deviceId,
         rssi: result.rssi,
         timestamp: new Date(),
@@ -94,24 +121,24 @@ class BluetoothAttendanceService {
       this.devices.set(deviceId, studentDevice);
       onDeviceFound(studentDevice);
       
-      console.log(`Found student device: ${studentName} (${deviceId})`);
+      console.log(`Found student device: ${studentInfo.name} (${deviceId})`);
     }
   }
 
   private addMockDevices(onDeviceFound: (device: StudentDevice) => void) {
-    // Simulate finding some students for demo
-    const mockDevices = [
-      "12:34:56:78:90:AB",
-      "AA:BB:CC:DD:EE:FF", 
-      "11:22:33:44:55:66",
-      "77:88:99:00:11:22"
-    ];
+    // Get all device IDs for the selected division
+    const mockDevices = Object.entries(STUDENT_MAPPING)
+      .filter(([_, studentInfo]) => !this.selectedDivision || studentInfo.division === this.selectedDivision)
+      .map(([deviceId, _]) => deviceId)
+      .slice(0, 4); // Limit to 4 students for demo
 
     mockDevices.forEach((deviceId, index) => {
       setTimeout(() => {
+        const studentInfo = STUDENT_MAPPING[deviceId];
         const studentDevice: StudentDevice = {
           id: deviceId,
-          name: STUDENT_MAPPING[deviceId],
+          name: studentInfo.name,
+          division: studentInfo.division,
           deviceId: deviceId,
           rssi: Math.floor(Math.random() * 40) - 80, // Random signal strength
           timestamp: new Date(),

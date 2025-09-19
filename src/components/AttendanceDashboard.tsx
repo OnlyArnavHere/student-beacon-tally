@@ -11,9 +11,11 @@ import {
   CheckCircle2, 
   AlertCircle,
   LogOut,
-  Scan
+  Scan,
+  GraduationCap
 } from "lucide-react";
-import { bluetoothService, StudentDevice } from "@/services/bluetoothService";
+import { bluetoothService, StudentDevice, getAvailableDivisions } from "@/services/bluetoothService";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface AttendanceDashboardProps {
   onLogout: () => void;
@@ -23,6 +25,8 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [presentStudents, setPresentStudents] = useState<StudentDevice[]>([]);
   const [scanStartTime, setScanStartTime] = useState<Date | null>(null);
+  const [selectedDivision, setSelectedDivision] = useState<string>("");
+  const [availableDivisions] = useState(getAvailableDivisions());
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,13 +43,25 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
   }, [toast]);
 
   const handleStartAttendance = async () => {
+    if (!selectedDivision) {
+      toast({
+        title: "Select Division",
+        description: "Please select a division first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsScanning(true);
     setScanStartTime(new Date());
     setPresentStudents([]);
 
+    // Set the division filter in the service
+    bluetoothService.setSelectedDivision(selectedDivision);
+
     toast({
       title: "Scanning Started",
-      description: "Looking for student devices...",
+      description: `Looking for students in ${selectedDivision}...`,
     });
 
     await bluetoothService.startScanning((device) => {
@@ -161,21 +177,38 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
           </Card>
         </div>
 
-        {/* Scan Controls */}
+        {/* Division Selection & Scan Controls */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Scan className="w-5 h-5" />
-              Attendance Scanning
+              <GraduationCap className="w-5 h-5" />
+              Select Division
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Choose Division:</label>
+              <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a division to take attendance" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableDivisions.map((division) => (
+                    <SelectItem key={division} value={division}>
+                      {division}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex gap-4">
               <Button
                 onClick={handleStartAttendance}
-                disabled={isScanning}
+                disabled={isScanning || !selectedDivision}
                 className="bg-gradient-primary hover:opacity-90 transition-opacity"
               >
+                <Scan className="w-4 h-4 mr-2" />
                 {isScanning ? "Scanning..." : "Start Attendance Scan"}
               </Button>
               
@@ -189,10 +222,16 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
               )}
             </div>
             
+            {selectedDivision && !isScanning && (
+              <div className="text-sm text-muted-foreground">
+                Ready to scan for <span className="font-medium text-foreground">{selectedDivision}</span> students
+              </div>
+            )}
+            
             {isScanning && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                Scanning for student devices... ({presentStudents.length} found)
+                Scanning for {selectedDivision} students... ({presentStudents.length} found)
               </div>
             )}
           </CardContent>
@@ -204,6 +243,7 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-success" />
               Present Students ({presentStudents.length})
+              {selectedDivision && <Badge variant="outline" className="ml-2">{selectedDivision}</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -211,7 +251,12 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
               <div className="text-center py-8 text-muted-foreground">
                 <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No students detected yet</p>
-                <p className="text-sm">Start scanning to detect nearby devices</p>
+                <p className="text-sm">
+                  {selectedDivision 
+                    ? `Select division and start scanning to detect ${selectedDivision} students` 
+                    : "Select a division and start scanning to detect students"
+                  }
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -227,7 +272,7 @@ const AttendanceDashboard = ({ onLogout }: AttendanceDashboardProps) => {
                       <div>
                         <p className="font-medium text-foreground">{student.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          Detected at {formatTime(student.timestamp)}
+                          {student.division} • Detected at {formatTime(student.timestamp)}
                         </p>
                       </div>
                     </div>
